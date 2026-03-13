@@ -1,10 +1,11 @@
-# GitLab CI/CD — секреты, сборка, фаззинг
-# Фаззинг выполняется после сборки (по аналогии с DAST) — нужен развёрнутый URL
+# GitLab CI/CD — секреты, сборка, контейнеры, фаззинг
+# Проверка безопасности образа (Trivy) выполняется ДО публикации в реестр
 
 stages:
   - security
   - build
-  - fuzzing     # Фаззинг веб-приложения (нужен FUZZ_TARGET_URL)
+  - container   # Сборка образа → сканирование → публикация (только при отсутствии уязвимостей)
+  - fuzzing
 
 variables:
   GIT_DEPTH: 0
@@ -32,7 +33,28 @@ build:
     paths:
       - .m2/repository
 
-# ─── Этап 3: Фаззинг (ffuf) — по аналогии с DAST ───
+# ─── Этап 3: Сборка Docker-образа, проверка безопасности, публикация в GitLab Container Registry ───
+# Публикация выполняется ТОЛЬКО при отсутствии уязвимостей HIGH/CRITICAL
+container:
+  stage: container
+  image: docker:24-dind
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - IMAGE_TAG=$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+    - docker build -t $IMAGE_TAG .
+    - docker save -o image.tar $IMAGE_TAG
+    # Сканирование: при обнаружении HIGH/CRITICAL — pipeline завершится, push не выполнится
+    - docker run --rm -v $PWD:/src -w /src aquasec/trivy:latest image --input image.tar --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed
+    - docker push $IMAGE_TAG
+    - docker tag $IMAGE_TAG $CI_REGISTRY_IMAGE:latest
+    - docker push $CI_REGISTRY_IMAGE:latest
+
+# ─── Этап 4: Фаззинг (ffuf) — по аналогии с DAST ───
 # Запускается только если задана переменная FUZZ_TARGET_URL (Settings → CI/CD → Variables)
 # Например: https://staging.example.com или URL Review App
 fuzzing:

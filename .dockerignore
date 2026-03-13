@@ -1,0 +1,8 @@
+.git
+.github
+.gitlab-ci.yml
+target
+*.md
+.gitleaks.toml
+fuzz-wordlist.txt
+fuzz-report.json
