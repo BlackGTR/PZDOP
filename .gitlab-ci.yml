@@ -1,0 +1,32 @@
+# GitLab CI/CD — интеграция обнаружения секретов
+# Сканирование выполняется ДО сборки; сборка останавливается при обнаружении секретов
+
+stages:
+  - security   # Секреты — первый этап
+  - build      # Сборка — только при отсутствии секретов
+
+variables:
+  GIT_DEPTH: 0  # Полная история для сканирования
+
+# ─── Этап 1: Поиск секретов (Gitleaks) ───
+secret-detection:
+  stage: security
+  image: zricethezav/gitleaks:latest
+  script:
+    - gitleaks detect --source . --no-banner --verbose --exit-code 1
+  artifacts:
+    when: on_failure
+    paths:
+      - gitleaks-report.json
+  allow_failure: false
+
+# ─── Этап 2: Сборка Java (Maven) — выполняется только при успешном security ───
+build:
+  stage: build
+  image: maven:3.9-eclipse-temurin-17
+  script:
+    - mvn clean compile -B
+  cache:
+    key: maven
+    paths:
+      - .m2/repository
