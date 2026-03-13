@@ -53,3 +53,34 @@ jobs:
       - name: Skip build (no pom.xml)
         if: hashFiles('**/pom.xml') == ''
         run: echo "pom.xml not found, skipping build"
+
+  # ─── Job 3: Фаззинг веб-приложения (ffuf) — по аналогии с DAST ───
+  # Задайте FUZZ_TARGET_URL в Settings → Secrets and variables → Actions (Variables)
+  fuzzing:
+    name: Fuzzing
+    runs-on: ubuntu-latest
+    needs: [secret-detection]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ffuf
+        run: |
+          curl -sSfL https://github.com/ffuf/ffuf/releases/download/v2.1.0/ffuf_2.1.0_linux_amd64.tar.gz | tar -xz -C /usr/local/bin ffuf
+
+      - name: Run ffuf
+        env:
+          FUZZ_TARGET_URL: ${{ vars.FUZZ_TARGET_URL }}
+        run: |
+          if [ -z "$FUZZ_TARGET_URL" ]; then
+            echo "FUZZ_TARGET_URL not set, skipping"
+            echo '{"results":[]}' > fuzz-report.json
+            exit 0
+          fi
+          TARGET=$(echo "$FUZZ_TARGET_URL" | sed 's|/$||')
+          ffuf -w fuzz-wordlist.txt -u "${TARGET}/FUZZ" -mc 200,201,301,302,401,403,405,500 -maxtime 120 -noninteractive -o fuzz-report.json -of json
+
+      - name: Upload fuzz report
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-report
+          path: fuzz-report.json

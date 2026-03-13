@@ -1,0 +1,23 @@
+# Wordlist для ffuf — типичные пути веб-приложений
+
+admin
+api
+login
+logout
+health
+actuator
+swagger
+swagger-ui
+graphql
+docs
+api-docs
+user
+users
+config
+v1
+v2
+test
+debug
+status
+metrics
+env

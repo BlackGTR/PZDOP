@@ -1,12 +1,13 @@
-# GitLab CI/CD — интеграция обнаружения секретов
-# Сканирование выполняется ДО сборки; сборка останавливается при обнаружении секретов
+# GitLab CI/CD — секреты, сборка, фаззинг
+# Фаззинг выполняется после сборки (по аналогии с DAST) — нужен развёрнутый URL
 
 stages:
-  - security   # Секреты — первый этап
-  - build      # Сборка — только при отсутствии секретов
+  - security
+  - build
+  - fuzzing     # Фаззинг веб-приложения (нужен FUZZ_TARGET_URL)
 
 variables:
-  GIT_DEPTH: 0  # Полная история для сканирования
+  GIT_DEPTH: 0
 
 # ─── Этап 1: Поиск секретов (Gitleaks) ───
 secret-detection:
@@ -20,7 +21,7 @@ secret-detection:
       - gitleaks-report.json
   allow_failure: false
 
-# ─── Этап 2: Сборка Java (Maven) — выполняется только при успешном security ───
+# ─── Этап 2: Сборка Java (Maven) ───
 build:
   stage: build
   image: maven:3.9-eclipse-temurin-17
@@ -30,3 +31,26 @@ build:
     key: maven
     paths:
       - .m2/repository
+
+# ─── Этап 3: Фаззинг (ffuf) — по аналогии с DAST ───
+# Запускается только если задана переменная FUZZ_TARGET_URL (Settings → CI/CD → Variables)
+# Например: https://staging.example.com или URL Review App
+fuzzing:
+  stage: fuzzing
+  image: golang:1.22
+  before_script:
+    - go install github.com/ffuf/ffuf/v2@latest
+  script:
+    - export PATH=$PATH:$(go env GOPATH)/bin
+    - |
+      if [ -z "${FUZZ_TARGET_URL:-}" ]; then
+        echo "FUZZ_TARGET_URL not set (Settings → CI/CD → Variables), skipping"
+        echo '{"results":[]}' > fuzz-report.json
+        exit 0
+      fi
+      TARGET=$(echo "$FUZZ_TARGET_URL" | sed 's|/$||')
+      ffuf -w fuzz-wordlist.txt -u "${TARGET}/FUZZ" -mc 200,201,301,302,401,403,405,500 -maxtime 120 -noninteractive -o fuzz-report.json -of json
+  artifacts:
+    when: always
+    paths:
+      - fuzz-report.json
