@@ -1,0 +1,26 @@
+# Конфигурация Gitleaks для Java-проекта
+# Документация: https://github.com/gitleaks/gitleaks
+
+title = "PZDOP Secret Detection Config"
+
+[extend]
+useDefault = true
+
+# Дополнительные правила для Java-проектов
+[[rules]]
+id = "java-properties-password"
+description = "Password in Java properties"
+regex = '''(?i)(password|passwd|pwd)\s*[=:]\s*['"]?[\w\-!@#$%^&*()+]{8,}['"]?'''
+tags = ["password", "java"]
+
+[[rules]]
+id = "aws-access-key"
+description = "AWS Access Key"
+regex = '''(?i)(A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}'''
+tags = ["aws", "key"]
+
+[[rules]]
+id = "private-key"
+description = "Private key"
+regex = '''-----BEGIN (RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----'''
+tags = ["key", "private"]
